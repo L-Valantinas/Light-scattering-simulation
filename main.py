@@ -109,7 +109,7 @@ def main():
     
     #Defining grid properties
     
-    data_shape = [128, 128]  # Number of grid points in z and x  [pixels]
+    data_shape = [256, 256]  # Number of grid points in z and x  [pixels]
     
     #wavelength in meters
     wavelength = 500e-9
@@ -143,14 +143,14 @@ def main():
     #The grid of refractive indices in each pixel
     n=np.ones(data_shape, dtype=np.complex)
 
-    n_0, n_max = [1, 1.5] # refractive index limits in the material
+    n_limits = np.array((1, 1.33)) # refractive index magnitude limits in the material
     
     print('[Calculating the scattering properties of the material]')
     #CIRCLE AT THE CENTER
     #The refractive index of a circle at the center
     turn_on_center_sphere = False
     if turn_on_center_sphere:
-        refractive_index_of_circle = 0
+        refractive_index_of_circle = n_limts[1] - 1
         center_circle_radius = 2e-6
         center_coordinates = [int(i/2) for i in data_shape]
         n += utils.calc.generate_circle(refractive_index_of_circle, center_circle_radius,
@@ -164,7 +164,7 @@ def main():
     if turn_on_random_spheres:
         number_of_circles = 20
         max_circle_radius = 5e-6
-        refractive_index_of_random_circles=0.5
+        refractive_index_of_random_circles= n_limits[1] - 1
         random_circle_radii = np.ndarray.flatten(max_circle_radius * rng.rand(1, number_of_circles))
         random_circle_z_coordinates = rng.choice(np.arange(0, data_shape[0]), number_of_circles)
         random_circle_x_coordinates = rng.choice(np.arange(x_bounds[0], x_bounds[1]), number_of_circles)
@@ -180,8 +180,8 @@ def main():
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
     turn_on_layer = True
     if turn_on_layer:
-        layer_size_z = 5e-6
-        refractive_index_deviation_range=[0,0.33]#The the refractive index deviation range
+        layer_size_z = 10e-6
+        refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
         layer = utils.calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
         
@@ -201,7 +201,7 @@ def main():
     
     n += d_grid_extinction
 
-    n[n > n_max] = n_max # reducing the refractive index to the designated maximum value, where it is exceeded
+    n[n > n_limits[1]] = n_limits[1] # reducing the refractive index to the designated maximum value, where it is exceeded
     
 # =============================================================================
     # T_matrix calculation
@@ -215,7 +215,7 @@ def main():
     
     print('[Calculating the inverse of the transmission matrix]')
     #Pseudo inverse T-matrix
-    Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 0.1, plot_singular_values = False)
+    Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 1e-1, plot_singular_values = False)
 
 # =============================================================================        
     #Specific wavefront propagation BPM simulation
@@ -275,28 +275,28 @@ def main():
         extent_full = disp.ranges2extent(*ranges_w_absorbtion) * 1e6
         #Plots the phase map of the wavefront in area outside the absorbing walls
         axs[0,0].imshow(disp.complex2rgb(focused_field[:,x_bounds[0]:x_bounds[1]], 2), extent = extent_partial)
+        axs[0,0].set(xlabel = '$\mu$m', ylabel = '$\mu$m')
+        axs[0,0].set_title('$E_{field}$ phase map')
 
         #Plots the light intensity in the area outside the absorbing walls
         I = np.abs(focused_field**2)
         img = axs[1,0].imshow(I[:,x_bounds[0]:x_bounds[1]], cmap = 'seismic', extent = extent_partial)#, extent = utils.ranges2extent(*ranges) * 1e6)
         disp.colorbar(img)
         axs[1,0].set(xlabel = '$\mu$m', ylabel = '$\mu$m')
+        axs[1,0].set_title('$E_{field}$ intensity map')
 
 
         axs[1,1].plot(x_range*1e6, np.abs(output_field)**2)
         axs[1,1].set(xlabel ='$\mu$m')
+        axs[1,1].set_title('Output field')
 
         axs[0,1].imshow(disp.complex2rgb(n - 1), extent = extent_full)
+        axs[0,1].set(xlabel = '$\mu$m', ylabel = '$\mu$m')
+        axs[0,1].set_title('$\Delta n$')
 
+        plt.subplots_adjust(hspace = 0.4, wspace = 0.2)
         plt.show(block = False)
         
-        
-        
-    
-    
-#    output_field_fourier = F.fftshift(F.fft(output_field))
-#    plt.plot(np.abs(output_field_fourier)**2)
-#    plt.show()
     
     
     #Presentation graphs
