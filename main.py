@@ -9,73 +9,11 @@ Created on Tue Jan 28 18:03:58 2020
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.fft as F
+
+import utils.calc
 import utils.display as disp
 import utils.array
 from utils.cache import disk
-
-def radius(row,column):
-    r=(abs(row**2)+abs(column**2))**0.5
-    return r
-
-#Scales colorbar to the figure appropriately (use for ploting instead of plt.colorbar() )
-def colorbar(mappable):
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-    last_axes = plt.gca()
-    ax = mappable.axes
-    fig = ax.figure
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    cbar = fig.colorbar(mappable, cax=cax)
-    plt.sca(last_axes)
-    return cbar
-
-
-def generate_circle(refractive_index, circle_radius, position, data_shape, data_size):
-    
-    
-    #Settings
-    #The grid of deviations of refractive indices from the normal
-    d_grid=np.zeros(data_shape, dtype=np.complex)
-    circle_radius_in_pixels=circle_radius/data_size[0]*data_shape[0]#circle radius in pixels
-    #A set of grid indices that are within the set radius
-    rows=[]
-    columns=[]
-    #Retrieving the set of indices
-    for x_index in range(data_shape[1]):
-        for z_index in range(data_shape[0]):
-            #Note that only the absolute value matters for the radius func
-            x,z = x_index - (position[1]+1), z_index - (position[0]+1)
-            if radius(z,x)<circle_radius_in_pixels:
-                columns.append(x_index)
-                rows.append(z_index)
-              
-    #The value by which the refractive index differs
-    d_grid[rows,columns]=refractive_index
-    return d_grid
-
-
-def scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range = [0,0.5], offset = 0):
-    """
-    Returns a random deviation in refractive index in a layer
-    """
-
-    #Refractive index shift grid
-    d_grid = np.zeros(data_shape, np.complex)
-    
-    #Layer size in z coordinates
-    layer_size_pixels = int(layer_size_z/data_size[0]*data_shape[0])
-    #Layer_position
-    layer_bounds_z = [int((data_shape[0]+k*layer_size_pixels)/2 + offset)-1 for k in [-1,1]]
-
-
-    #Randomised variables
-    rng=np.random.RandomState()
-    rng.seed(0)
-    #Generating random refractive indices
-    d_grid[layer_bounds_z[0]:layer_bounds_z[1],:] = refractive_index_deviation_range[0] + rng.rand(layer_size_pixels, data_shape[1]) * np.diff(refractive_index_deviation_range)
-    
-    #returns the difference of the refractive index from the background and the coordinates of the layer
-    return d_grid, layer_bounds_z
 
 
 
@@ -215,7 +153,7 @@ def main():
         refractive_index_of_circle = 0
         center_circle_radius = 2e-6
         center_coordinates = [int(i/2) for i in data_shape]
-        n += generate_circle(refractive_index_of_circle, center_circle_radius,
+        n += utils.calc.generate_circle(refractive_index_of_circle, center_circle_radius,
                                center_coordinates, data_shape, data_size)
 
     
@@ -232,7 +170,7 @@ def main():
         random_circle_x_coordinates = rng.choice(np.arange(x_bounds[0], x_bounds[1]), number_of_circles)
         
         for Nr, random_circle_radius in enumerate(random_circle_radii):
-            n += generate_circle(refractive_index_of_random_circles, random_circle_radius,
+            n += utils.calc.generate_circle(refractive_index_of_random_circles, random_circle_radius,
                                  [random_circle_z_coordinates[Nr], random_circle_x_coordinates[Nr]],
                                  data_shape, data_size)
     
@@ -244,7 +182,7 @@ def main():
     if turn_on_layer:
         layer_size_z = 10e-6
         refractive_index_deviation_range=[0,0.5]#The the refractive index deviation range
-        layer = scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
+        layer = utils.calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
         
     
@@ -341,7 +279,7 @@ def main():
         #Plots the light intensity in the area outside the absorbing walls
         I = np.abs(focused_field**2)
         img = axs[1,0].imshow(I[:,x_bounds[0]:x_bounds[1]], cmap = 'seismic', extent = extent_partial)#, extent = utils.ranges2extent(*ranges) * 1e6)
-        colorbar(img)
+        disp.colorbar(img)
         axs[1,0].set(xlabel = '$\mu$m', ylabel = '$\mu$m')
 
 
