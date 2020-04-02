@@ -296,14 +296,12 @@ def main():
         sigma = wavelength / 2
         target_field = np.exp(-0.5*x_range**2/sigma**2)
         target_field = target_field.astype(np.complex)
-        
-        #phaseshift
-#        phase_shift = np.exp(2j*np.pi * 2 * np.linspace(-0.5, 0.5, input_field.size))
-#        phase_shift = phase_shift[np.newaxis, :]
-        
+
+        phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
+
         print('[Calculating the corrected input wavefront]')
         #Using the inverse transmission matrix to invert the input wavefront
-        inverted_input_field = (Transmission_matrix_inverse @ target_field.flatten())[np.newaxis, :] #* phase_shift
+        inverted_input_field = (Transmission_matrix_inverse @ target_field.flatten())[np.newaxis, :] * phase_shift
         inverted_input_field /= np.linalg.norm(inverted_input_field.ravel())
 
 
