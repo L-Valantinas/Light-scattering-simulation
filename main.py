@@ -109,7 +109,7 @@ def main():
     
     #Defining grid properties
     
-    data_shape = [256, 256]  # Number of grid points in z and x  [pixels]
+    data_shape = [128, 128]  # Number of grid points in z and x  [pixels]
     
     #wavelength in meters
     wavelength = 500e-9
@@ -180,8 +180,8 @@ def main():
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
     turn_on_layer = True
     if turn_on_layer:
-        layer_size_z = 10e-6
-        refractive_index_deviation_range=[0,0.5]#The the refractive index deviation range
+        layer_size_z = 5e-6
+        refractive_index_deviation_range=[0,0.33]#The the refractive index deviation range
         layer = utils.calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
         
@@ -299,50 +299,14 @@ def main():
 #    plt.show()
     
     
-    #Interactive plot (use for presentations)
+    #Presentation graphs
 # =============================================================================
-#    A_z[:] = 0
-#    A_z[int(data_shape[1]/2-5):int(data_shape[1]/2+5)]=1
-#    A_z = A_z.astype(np.complex)
-#    A_scattered = simulate_propagation(A_z, bpm_arguments)
-#    
-#    ranges=[z_range,x_range/x_shape_multiplier]
-#    
-#    fig, (ax1, ax2) = plt.subplots(ncols = 2)
-#         
-#    I=np.abs(A_scattered**2)
-#    I = I/np.max(I)
-#    
-#    img1 = ax1.imshow(I[:,x_bounds[0]:x_bounds[1]], cmap = 'seismic', extent = utils.ranges2extent(*ranges) * 1e6)
-#    colorbar(img1)
-#    
-#    if turn_on_layer:
-#        layer_grid = np.zeros(n[:,x_bounds[0]:x_bounds[1]].shape)
-#        layer_grid[layer[1],:] = 1
-#        layer_grid = np.ma.masked_where(layer_grid<1, layer_grid)
-#        ax1.imshow(layer_grid, alpha = 0.5, cmap = 'RdYlGn',extent = utils.ranges2extent(*ranges) * 1e6)
-#    ax1.set(xlabel = '$\mu$m', ylabel = '$\mu$m')
-#    ax1.set_title('(a)')
-#
-#
-#  
-#    
-#    I=np.abs(focused_field**2)
-#    I = I/np.max(I)
-#    
-#    img2 = ax2.imshow(I[:,x_bounds[0]:x_bounds[1]], cmap = 'seismic', extent = utils.ranges2extent(*ranges) * 1e6)
-#    colorbar(img2)
-#    
-#    if turn_on_layer:
-#        layer_grid = np.zeros(n[:,x_bounds[0]:x_bounds[1]].shape)
-#        layer_grid[layer[1],:] = 1
-#        layer_grid = np.ma.masked_where(layer_grid<1, layer_grid)
-#        ax2.imshow(layer_grid, alpha = 0.5, cmap = 'RdYlGn',extent = utils.ranges2extent(*ranges) * 1e6)
-#    ax2.set(ylabel = '$\mu$m', xlabel = '$\mu$m')
-#    ax2.set_title('(b)')
-#    
-#    plt.tight_layout(pad = 0.3)
-#    plt.show()
+    turn_on_presentation_graphs = False
+    if turn_on_layer and turn_on_presentation_graphs:
+        sigma = wavelength / 2
+        target_field = np.exp(-0.5*x_range**2/sigma**2)
+        target_field = target_field.astype(np.complex)
+        disp.scattering_presentation(n, k_0, sample_pitch, target_field, Transmission_matrix_inverse)
 # =============================================================================
     return Transmission_matrix,n
     
