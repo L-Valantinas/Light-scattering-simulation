@@ -21,13 +21,8 @@ from utils.cache import disk
 def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray, return_internal_fields=False):
     """
     Calculates wave propagation using the beam propagation method.
-
-    :param n: The complex refractive index distribution
-    :param sample_pitch: The sample pitch
-    :param k_0: The wavenumber at refractive index 1.
-    :param input_field: The complex input field.
-    :param return_internal_fields: Boolean to indicate whether internal fields should be returned or not. (default: False)
-    :return: Returns an array with the output or internal field. This array is either the size of the input_field, or
+    
+    Returns an array with the output or internal field. This array is either the size of the input_field, or
     a stack of such arrays of the same dimensions as the refractive index, n.
     """
     z_range, x_range = utils.array.calc_ranges(n.shape, sample_pitch)
@@ -43,7 +38,7 @@ def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarra
     if return_internal_fields:
         result = np.zeros(n.shape, dtype=np.complex)
 
-    heterogeneous = True
+    heterogeneous = True # For this variable to ever become False absorbing walls need to be turned off.
     for z_idx in range(n.shape[0]):
         # Propagate plane waves in Fourier space unless we just passed a heterogeneous layer
         if heterogeneous:
@@ -55,6 +50,7 @@ def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarra
 
         # Check if the current layer is free space propagation or not
         heterogeneous = np.any(np.abs(n[z_idx, :] - n[z_idx, 0]) > 1e-6)
+        
 
         if heterogeneous or return_internal_fields:
             field =F.ifft(field_ft)  # return to real space
@@ -73,8 +69,9 @@ def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarra
 
     return result
 
+
 @disk.cache
-def T_matrix_measurement(n, k_0, sample_pitch):
+def T_matrix_measurement(n: np.ndarray, k_0: np.float, sample_pitch):
     
     Matrix_shape = np.size(n[1])
     Transmission_matrix=np.zeros([Matrix_shape,Matrix_shape], dtype=np.complex)#
@@ -89,7 +86,7 @@ def T_matrix_measurement(n, k_0, sample_pitch):
     return Transmission_matrix
 
 
-def Matrix_pseudo_inversion(Matrix, singular_value_minimum = 0.1, plot_singular_values = False):
+def Matrix_pseudo_inversion(Matrix: np.ndarray, singular_value_minimum = 0.1, plot_singular_values = False):
     #Singular Value Decomposition
     U, S, Vh = np.linalg.svd(Matrix)
     V = Vh.T.conj()
@@ -140,12 +137,10 @@ def main():
     rng.seed(0)
 
     #refractive index
-    #The grid of refractive indices in each pixel
-    n=np.ones(data_shape, dtype=np.complex)
-
     n_limits = np.array((1, 1.33)) # refractive index magnitude limits in the material
-    
+    n=np.ones(data_shape, dtype=np.complex) #The grid of refractive indices in each pixel
     print('[Calculating the scattering properties of the material]')
+
     #CIRCLE AT THE CENTER
     #The refractive index of a circle at the center
     turn_on_center_sphere = False
@@ -189,7 +184,7 @@ def main():
         
     #ABSORBTION AT THE EDGES  
     #Linearly increasing absorbtion
-    max_extinction_coef = 0.1j
+    max_extinction_coef = 1e-10j
     
     #Setting up grid
     d_grid_extinction = np.abs(np.arange(data_shape[1])-data_shape[1]/2)
@@ -301,7 +296,7 @@ def main():
     
     #Presentation graphs
 # =============================================================================
-    turn_on_presentation_graphs = False
+    turn_on_presentation_graphs = True
     if turn_on_layer and turn_on_presentation_graphs:
         sigma = wavelength / 2
         target_field = np.exp(-0.5*x_range**2/sigma**2)
