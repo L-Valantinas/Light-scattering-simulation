@@ -1,4 +1,4 @@
-import utils.calc
+import calc
 import numpy as np
 
 def scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range = [0,0.5], offset = 0):

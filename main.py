@@ -9,8 +9,10 @@ Created on Tue Jan 28 18:03:58 2020
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.fft as F
+from scipy.optimize import curve_fit
+import scipy as sci
 
-import utils.calc
+import calc
 import utils.display as disp
 import utils.array
 from utils.cache import disk
@@ -21,7 +23,7 @@ from utils.cache import disk
 def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray, return_internal_fields=False):
     """
     Calculates wave propagation using the beam propagation method.
-    
+
     Returns an array with the output or internal field. This array is either the size of the input_field, or
     a stack of such arrays of the same dimensions as the refractive index, n.
     """
@@ -100,6 +102,33 @@ def Matrix_pseudo_inversion(Matrix: np.ndarray, singular_value_minimum = 0.1, pl
     return V @ np.diag(S_inv) @ U.T.conj()#using an svd property to get the inverse matrix
 
 
+@disk.cache
+def angular_memory_effect_analysis(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray):
+    """
+    """
+    max_tilt_coef = 600
+    tilt_coef_range = np.arange(-max_tilt_coef, max_tilt_coef).ravel()
+    all_output_fields = np.zeros([tilt_coef_range.size, n.shape[1]], dtype = np.complex)
+
+    for idx, coefficient in enumerate(tilt_coef_range * 0.4):
+
+        phase_shift = np.exp(coefficient * 2j * np.pi * np.linspace(-0.5, 0.5, n.shape[1])) # tilt phaseshift
+        tilted_field = input_field * phase_shift # tilting the input field
+        output_field = propagate(n, k_0, sample_pitch, tilted_field) # propagating the tilted field
+
+        #taking intensity and normalising
+        output_field = np.abs(output_field)**2
+        output_field /= output_field.max()
+
+        all_output_fields[idx, :] = output_field.ravel()
+
+
+
+    return all_output_fields
+
+def fit_fun(x, a, b, c, d):
+    return a*x**3 + b*x**2 + c*x**1 + d
+
 
 def main():
 # =============================================================================
@@ -137,7 +166,7 @@ def main():
     rng.seed(0)
 
     #refractive index
-    n_limits = np.array((1, 1.33)) # refractive index magnitude limits in the material
+    n_limits = np.array((1, 1.5)) # refractive index magnitude limits in the material
     n=np.ones(data_shape, dtype=np.complex) #The grid of refractive indices in each pixel
     print('[Calculating the scattering properties of the material]')
 
@@ -148,7 +177,7 @@ def main():
         refractive_index_of_circle = n_limts[1] - 1
         center_circle_radius = 2e-6
         center_coordinates = [int(i/2) for i in data_shape]
-        n += utils.calc.generate_circle(refractive_index_of_circle, center_circle_radius,
+        n += calc.generate_circle(refractive_index_of_circle, center_circle_radius,
                                center_coordinates, data_shape, data_size)
 
     
@@ -165,7 +194,7 @@ def main():
         random_circle_x_coordinates = rng.choice(np.arange(x_bounds[0], x_bounds[1]), number_of_circles)
         
         for Nr, random_circle_radius in enumerate(random_circle_radii):
-            n += utils.calc.generate_circle(refractive_index_of_random_circles, random_circle_radius,
+            n += calc.generate_circle(refractive_index_of_random_circles, random_circle_radius,
                                  [random_circle_z_coordinates[Nr], random_circle_x_coordinates[Nr]],
                                  data_shape, data_size)
     
@@ -175,9 +204,9 @@ def main():
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
     turn_on_layer = True
     if turn_on_layer:
-        layer_size_z = 10e-6
+        layer_size_z = 20e-6
         refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
-        layer = utils.calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
+        layer = calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
         
     
@@ -242,6 +271,45 @@ def main():
         focused_field = propagate(n, k_0, sample_pitch, inverted_input_field, True)
         output_field = focused_field[-1,:]
 
+        print('[Analysing the angular optical memory effect]')
+        memory_effect = angular_memory_effect_analysis(n, k_0, sample_pitch, inverted_input_field)
+        
+        element_number = memory_effect[:, 0].size
+        element_range = np.arange(element_number)
+        x_mean_i_range = np.zeros(memory_effect[:,0].shape)
+        for i in element_range:
+            #measuring the I weighted mean of x for a specific output
+            I = memory_effect[i] # specific output field
+            tot_I = np.sum(I)# sum of irradiances
+            x_i = np.arange(1, data_shape[1] + 1) - data_shape[1]/2 # x_range in pixels
+            x_mean_i =  np.sum( I / tot_I * x_range *1e6)
+            x_mean_i_range[i] = x_mean_i
+
+        popt, pcov = curve_fit(fit_fun, element_range, x_mean_i_range)
+        y = fit_fun(element_range, *popt)
+        
+        #Calculating the critical points
+        y_der_abs = np.abs(np.gradient(y))
+        half_point = int(element_number / 2 - 1)
+        critical_point_idxs = list(y_der_abs[:half_point]).index(y_der_abs[:half_point].min()), half_point + list(y_der_abs[half_point:]).index(y_der_abs[half_point:].min())
+        critical_point = np.array([ [element_range[idx], y[idx]] for idx in critical_point_idxs ] )
+
+
+        fig, axs_mem = plt.subplots(1, 1)
+        axs_mem.plot(x_mean_i_range)
+        axs_mem.plot(element_range, y)
+        axs_mem.scatter(critical_point[:, 0], critical_point[:, 1], color = 'black')
+        plt.show(block = False)
+        
+
+        # for i in range(39):
+        #     print(np.correlate(memory_effect[20],memory_effect[i]))
+
+
+
+
+
+
         # for i in np.arange(-2, 3, 1)*1:
         #     inverted_input_field = inverted_input_field_original[:, np.clip(i+ np.arange(data_shape[1]), 0, data_shape[1]-1)]
         #     inverted_input_field /= np.linalg.norm(inverted_input_field.flatten())
@@ -296,7 +364,7 @@ def main():
     
     #Presentation graphs
 # =============================================================================
-    turn_on_presentation_graphs = True
+    turn_on_presentation_graphs = False
     if turn_on_layer and turn_on_presentation_graphs:
         sigma = wavelength / 2
         target_field = np.exp(-0.5*x_range**2/sigma**2)

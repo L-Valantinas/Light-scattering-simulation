@@ -1,4 +1,4 @@
-import utils.calc
+import calc
 import numpy as np
 
 
