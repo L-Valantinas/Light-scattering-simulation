@@ -74,7 +74,6 @@ def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarra
 
 @disk.cache
 def T_matrix_measurement(n: np.ndarray, k_0: np.float, sample_pitch):
-    
     Matrix_shape = np.size(n[1])
     Transmission_matrix=np.zeros([Matrix_shape,Matrix_shape], dtype=np.complex)#
 
@@ -103,15 +102,12 @@ def Matrix_pseudo_inversion(Matrix: np.ndarray, singular_value_minimum = 0.1, pl
 
 
 @disk.cache
-def angular_memory_effect_analysis(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray):
+def angular_memory_effect_analysis(tilt_step: np.float, max_tilt_coef: np.float, n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray):
     """
     """
-    max_tilt_coef = 600
-    tilt_coef_range = np.arange(-max_tilt_coef, max_tilt_coef).ravel()
-    all_output_fields = np.zeros([tilt_coef_range.size, n.shape[1]], dtype = np.complex)
-
-    for idx, coefficient in enumerate(tilt_coef_range * 0.4):
-
+    tilt_coef_range = np.arange(-max_tilt_coef, max_tilt_coef, tilt_step).ravel() # The range of Zernike polynomial coefficients
+    all_output_fields = np.zeros([tilt_coef_range.size, n.shape[1]]) # holds the output fields for each tilt value
+    for idx, coefficient in enumerate(tilt_coef_range):
         phase_shift = np.exp(coefficient * 2j * np.pi * np.linspace(-0.5, 0.5, n.shape[1])) # tilt phaseshift
         tilted_field = input_field * phase_shift # tilting the input field
         output_field = propagate(n, k_0, sample_pitch, tilted_field) # propagating the tilted field
@@ -120,14 +116,9 @@ def angular_memory_effect_analysis(n: np.ndarray, k_0: np.float, sample_pitch, i
         output_field = np.abs(output_field)**2
         output_field /= output_field.max()
 
-        all_output_fields[idx, :] = output_field.ravel()
-
-
-
+        all_output_fields[idx, :] = output_field.ravel() # saving the results
     return all_output_fields
 
-def fit_fun(x, a, b, c, d):
-    return a*x**3 + b*x**2 + c*x**1 + d
 
 
 def main():
@@ -271,39 +262,35 @@ def main():
         focused_field = propagate(n, k_0, sample_pitch, inverted_input_field, True)
         output_field = focused_field[-1,:]
 
-        print('[Analysing the angular optical memory effect]')
-        memory_effect = angular_memory_effect_analysis(n, k_0, sample_pitch, inverted_input_field)
-        
-        element_number = memory_effect[:, 0].size
-        element_range = np.arange(element_number)
-        x_mean_i_range = np.zeros(memory_effect[:,0].shape)
-        for i in element_range:
-            #measuring the I weighted mean of x for a specific output
-            I = memory_effect[i] # specific output field
-            tot_I = np.sum(I)# sum of irradiances
-            x_i = np.arange(1, data_shape[1] + 1) - data_shape[1]/2 # x_range in pixels
-            x_mean_i =  np.sum( I / tot_I * x_range *1e6)
-            x_mean_i_range[i] = x_mean_i
 
-        popt, pcov = curve_fit(fit_fun, element_range, x_mean_i_range)
-        y = fit_fun(element_range, *popt)
+
+        print('[Analysing the angular optical memory effect]')
+        memory_effect = angular_memory_effect_analysis( 0.4, 100, n, k_0, sample_pitch, inverted_input_field)
+        
+        number_of_outputs = memory_effect[:, 0].size
+        element_range = np.arange(number_of_outputs)
+        average_output_spike_range = np.zeros(memory_effect[:,0].shape)
+        for idx in element_range:
+            #measuring the I weighted mean of displacement for a specific output
+            tot_I = np.sum(memory_effect[idx])# sum of irradiances
+            average_output_spike =  np.sum( memory_effect[idx] / tot_I * x_range *1e6)
+            average_output_spike_range[idx] = average_output_spike
+
+        popt, pcov = curve_fit(calc.third_order_polynomial, element_range, average_output_spike_range)
+        displacement_fit = calc.third_order_polynomial(element_range, *popt)
         
         #Calculating the critical points
-        y_der_abs = np.abs(np.gradient(y))
-        half_point = int(element_number / 2 - 1)
-        critical_point_idxs = list(y_der_abs[:half_point]).index(y_der_abs[:half_point].min()), half_point + list(y_der_abs[half_point:]).index(y_der_abs[half_point:].min())
-        critical_point = np.array([ [element_range[idx], y[idx]] for idx in critical_point_idxs ] )
-
+        displacement_fit_derivative = np.abs(np.gradient(displacement_fit))
+        x_center_idx = int(number_of_outputs / 2 - 1) # the center of x range in index notation
+        critical_point_idxs = list(displacement_fit_derivative[:x_center_idx]).index(displacement_fit_derivative[:x_center_idx].min()), x_center_idx + list(displacement_fit_derivative[x_center_idx:]).index(displacement_fit_derivative[x_center_idx:].min())
+        critical_points = np.array([ [element_range[idx], displacement_fit[idx]] for idx in critical_point_idxs ] )
 
         fig, axs_mem = plt.subplots(1, 1)
-        axs_mem.plot(x_mean_i_range)
-        axs_mem.plot(element_range, y)
-        axs_mem.scatter(critical_point[:, 0], critical_point[:, 1], color = 'black')
+        axs_mem.plot(average_output_spike_range)
+        axs_mem.plot(element_range, displacement_fit)
+        axs_mem.scatter(critical_points[:, 0], critical_points[:, 1], color = 'black')
         plt.show(block = False)
         
-
-        # for i in range(39):
-        #     print(np.correlate(memory_effect[20],memory_effect[i]))
 
 
 
