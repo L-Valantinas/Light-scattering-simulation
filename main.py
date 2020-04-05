@@ -271,20 +271,20 @@ def main():
             print('[Analysing the angular optical memory effect]')
 
 
-            
+
             #Comparing outputs
             memory_effect = angular_memory_effect_analysis(0.4, 80, n, k_0, sample_pitch, inverted_input_field)
             
             number_of_outputs = memory_effect[:, 0].size
             element_range = np.arange(-80, 80, 0.4)
-            average_output_spike_range = np.zeros(memory_effect[:,0].shape)
+            x_mean_range = np.zeros(memory_effect[:,0].shape)
             for idx in range(number_of_outputs):
                 #measuring the I weighted mean of displacement for a specific output
                 tot_I = np.sum(memory_effect[idx])# sum of irradiances
-                average_output_spike =  np.sum( memory_effect[idx] / tot_I * x_range *1e6)
-                average_output_spike_range[idx] = average_output_spike
+                x_mean =  np.sum( memory_effect[idx] / tot_I * x_range *1e6)
+                x_mean_range[idx] = x_mean
 
-            popt, pcov = curve_fit(calc.third_order_polynomial, element_range, average_output_spike_range)
+            popt, pcov = curve_fit(calc.third_order_polynomial, element_range, x_mean_range)
             displacement_fit = calc.third_order_polynomial(element_range, *popt)
             
             #Calculating the critical points
@@ -294,12 +294,21 @@ def main():
             critical_points = np.array([ [element_range[idx], displacement_fit[idx]] for idx in critical_point_idxs ] )
 
 
+            #Calculating the standard deviation
+            outputs_std = np.std(memory_effect, 1)
+            
 
-            fig, axs_mem = plt.subplots(1, 1)
-            axs_mem.plot(element_range, average_output_spike_range)
-            axs_mem.plot(element_range, displacement_fit)
-            axs_mem.scatter(critical_points[:, 0], critical_points[:, 1], color = 'black')
-            axs_mem.set(xlabel = '$Z_1^{-1}$ coefficient', ylabel = '$ \langle x \\rangle$, $ \mu m $ ')
+            fig, axs_mem = plt.subplots(1, 2)
+            axs_mem[0].plot(element_range, x_mean_range)
+            axs_mem[0].plot(element_range, displacement_fit)
+            axs_mem[0].scatter(critical_points[:, 0], critical_points[:, 1], color = 'black')
+            axs_mem[0].set(xlabel = '$Z_1^{-1}$ coefficient', ylabel = '$ \langle x \\rangle$, $ \mu m $ ')
+            axs_mem[0].set_title('Average displacement')
+
+            axs_mem[1].plot(element_range, outputs_std)
+            axs_mem[1].set_title('Standard deviation of output fields')
+            axs_mem[1].set(xlabel = '$Z_1^{-1}$ coefficient', ylabel = '$ \sigma$, $ \mu m $ ') 
+                      
             plt.show(block = False)
 
     
