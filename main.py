@@ -204,7 +204,7 @@ def main():
         
     #ABSORBTION AT THE EDGES  
     #Linearly increasing absorbtion
-    max_extinction_coef = 1e-10j
+    max_extinction_coef = 0.1j
     
     #Setting up grid
     d_grid_extinction = np.abs(np.arange(data_shape[1])-data_shape[1]/2)
@@ -237,6 +237,7 @@ def main():
      
     #Setting which determines, whether the beam propagation will be done or not
     do_the_beam_propagation = True
+    do_the_memory_effect_analysis = True
     
     if do_the_beam_propagation:
         #Defining source and its position
@@ -264,49 +265,43 @@ def main():
 
 
 
-        print('[Analysing the angular optical memory effect]')
-        memory_effect = angular_memory_effect_analysis( 0.4, 100, n, k_0, sample_pitch, inverted_input_field)
-        
-        number_of_outputs = memory_effect[:, 0].size
-        element_range = np.arange(number_of_outputs)
-        average_output_spike_range = np.zeros(memory_effect[:,0].shape)
-        for idx in element_range:
-            #measuring the I weighted mean of displacement for a specific output
-            tot_I = np.sum(memory_effect[idx])# sum of irradiances
-            average_output_spike =  np.sum( memory_effect[idx] / tot_I * x_range *1e6)
-            average_output_spike_range[idx] = average_output_spike
 
-        popt, pcov = curve_fit(calc.third_order_polynomial, element_range, average_output_spike_range)
-        displacement_fit = calc.third_order_polynomial(element_range, *popt)
-        
-        #Calculating the critical points
-        displacement_fit_derivative = np.abs(np.gradient(displacement_fit))
-        x_center_idx = int(number_of_outputs / 2 - 1) # the center of x range in index notation
-        critical_point_idxs = list(displacement_fit_derivative[:x_center_idx]).index(displacement_fit_derivative[:x_center_idx].min()), x_center_idx + list(displacement_fit_derivative[x_center_idx:]).index(displacement_fit_derivative[x_center_idx:].min())
-        critical_points = np.array([ [element_range[idx], displacement_fit[idx]] for idx in critical_point_idxs ] )
+        if do_the_memory_effect_analysis:
 
-        fig, axs_mem = plt.subplots(1, 1)
-        axs_mem.plot(average_output_spike_range)
-        axs_mem.plot(element_range, displacement_fit)
-        axs_mem.scatter(critical_points[:, 0], critical_points[:, 1], color = 'black')
-        plt.show(block = False)
-        
+            print('[Analysing the angular optical memory effect]')
 
 
+            
+            #Comparing outputs
+            memory_effect = angular_memory_effect_analysis(0.4, 80, n, k_0, sample_pitch, inverted_input_field)
+            
+            number_of_outputs = memory_effect[:, 0].size
+            element_range = np.arange(-80, 80, 0.4)
+            average_output_spike_range = np.zeros(memory_effect[:,0].shape)
+            for idx in range(number_of_outputs):
+                #measuring the I weighted mean of displacement for a specific output
+                tot_I = np.sum(memory_effect[idx])# sum of irradiances
+                average_output_spike =  np.sum( memory_effect[idx] / tot_I * x_range *1e6)
+                average_output_spike_range[idx] = average_output_spike
+
+            popt, pcov = curve_fit(calc.third_order_polynomial, element_range, average_output_spike_range)
+            displacement_fit = calc.third_order_polynomial(element_range, *popt)
+            
+            #Calculating the critical points
+            displacement_fit_derivative = np.abs(np.gradient(displacement_fit))
+            x_center_idx = int(number_of_outputs / 2 - 1) # the center of x range in index notation
+            critical_point_idxs = list(displacement_fit_derivative[:x_center_idx]).index(displacement_fit_derivative[:x_center_idx].min()), x_center_idx + list(displacement_fit_derivative[x_center_idx:]).index(displacement_fit_derivative[x_center_idx:].min())
+            critical_points = np.array([ [element_range[idx], displacement_fit[idx]] for idx in critical_point_idxs ] )
 
 
 
+            fig, axs_mem = plt.subplots(1, 1)
+            axs_mem.plot(element_range, average_output_spike_range)
+            axs_mem.plot(element_range, displacement_fit)
+            axs_mem.scatter(critical_points[:, 0], critical_points[:, 1], color = 'black')
+            axs_mem.set(xlabel = '$Z_1^{-1}$ coefficient', ylabel = '$ \langle x \\rangle$, $ \mu m $ ')
+            plt.show(block = False)
 
-        # for i in np.arange(-2, 3, 1)*1:
-        #     inverted_input_field = inverted_input_field_original[:, np.clip(i+ np.arange(data_shape[1]), 0, data_shape[1]-1)]
-        #     inverted_input_field /= np.linalg.norm(inverted_input_field.flatten())
-        #     #Do the BPM        
-        #     focused_field = propagate(n, k_0, sample_pitch, inverted_input_field, True)
-        #     output_field = focused_field[-1,:]
-
-        #     plt.plot(x_range * 1e6, np.abs(output_field)**2)
-
-        # plt.show(block = False)
     
     
 # =============================================================================        
