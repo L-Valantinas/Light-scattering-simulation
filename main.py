@@ -165,8 +165,8 @@ def main():
     #The refractive index of a circle at the center
     turn_on_center_sphere = False
     if turn_on_center_sphere:
-        refractive_index_of_circle = n_limts[1] - 1
-        center_circle_radius = 2e-6
+        refractive_index_of_circle = n_limits[1] - 1
+        center_circle_radius = 8e-6
         center_coordinates = [int(i/2) for i in data_shape]
         n += calc.generate_circle(refractive_index_of_circle, center_circle_radius,
                                center_coordinates, data_shape, data_size)
@@ -195,7 +195,7 @@ def main():
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
     turn_on_layer = True
     if turn_on_layer:
-        layer_size_z = 20e-6
+        layer_size_z = 10e-6
         refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
         layer = calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
@@ -204,7 +204,7 @@ def main():
         
     #ABSORBTION AT THE EDGES  
     #Linearly increasing absorbtion
-    max_extinction_coef = 0.1j
+    max_extinction_coef = 0.1j #1e-10j
     
     #Setting up grid
     d_grid_extinction = np.abs(np.arange(data_shape[1])-data_shape[1]/2)
@@ -216,7 +216,7 @@ def main():
     
     n += d_grid_extinction
 
-    n[n > n_limits[1]] = n_limits[1] # reducing the refractive index to the designated maximum value, where it is exceeded
+    # n[n > n_limits[1]] = n_limits[1] # reducing the refractive index to the designated maximum value, where it is exceeded
     
 # =============================================================================
     # T_matrix calculation
@@ -230,14 +230,14 @@ def main():
     
     print('[Calculating the inverse of the transmission matrix]')
     #Pseudo inverse T-matrix
-    Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 1e-1, plot_singular_values = False)
+    Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 1e-3, plot_singular_values = False)
 
 # =============================================================================        
     #Specific wavefront propagation BPM simulation
      
     #Setting which determines, whether the beam propagation will be done or not
     do_the_beam_propagation = True
-    do_the_memory_effect_analysis = True
+    do_the_memory_effect_analysis = False
     
     if do_the_beam_propagation:
         #Defining source and its position
@@ -247,9 +247,11 @@ def main():
         
         
         #Defining a Gaussian source
-        sigma = wavelength / 2
-        target_field = np.exp(-0.5*x_range**2/sigma**2)
-        target_field = target_field.astype(np.complex)
+        # sigma = wavelength / 2
+        # target_field = np.exp(-0.5*x_range**2/sigma**2)
+        # target_field = target_field.astype(np.complex)
+        target_field = np.zeros(data_shape[1]).ravel()
+        target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
 
         phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
 
@@ -266,6 +268,7 @@ def main():
 
 
 
+
         if do_the_memory_effect_analysis:
 
             print('[Analysing the angular optical memory effect]')
@@ -273,6 +276,10 @@ def main():
 
 
             #Comparing outputs
+
+            ### Will need to calculate max range first
+
+
             memory_effect = angular_memory_effect_analysis(0.4, 80, n, k_0, sample_pitch, inverted_input_field)
             
             number_of_outputs = memory_effect[:, 0].size
@@ -311,11 +318,12 @@ def main():
                       
             plt.show(block = False)
 
-    
+            
     
 # =============================================================================        
     # DISPLAY    
     
+
 
 
     
@@ -350,12 +358,20 @@ def main():
 
         plt.subplots_adjust(hspace = 0.4, wspace = 0.2)
         plt.show(block = False)
+
+
+        planewave = np.ones(data_shape[1]).flatten()
+        planewave_propagation = propagate(n, k_0, sample_pitch, planewave, True)
+        fig, axs = plt.subplots()
+        axs.imshow(disp.complex2rgb(planewave_propagation), extent = extent_full)
+        axs.set(xlabel = '$\mu$m', ylabel = '$\mu$m')
+        plt.show(block = False)
         
     
     
     #Presentation graphs
 # =============================================================================
-    turn_on_presentation_graphs = False
+    turn_on_presentation_graphs = True
     if turn_on_layer and turn_on_presentation_graphs:
         sigma = wavelength / 2
         target_field = np.exp(-0.5*x_range**2/sigma**2)
