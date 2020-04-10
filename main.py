@@ -120,13 +120,48 @@ def angular_memory_effect_analysis(tilt_step: np.float, max_tilt_coef: np.float,
     return all_output_fields
 
 
+@disk.cache
+def shift_memory_effect_analysis(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray, plot_std = True, TM = False):
+
+    max_shift = 10 # in pixels
+    shift_range = np.arange(max_shift)
+    shifted_outputs = np.zeros([max_shift, n.shape[1]])
+
+    #If the transmission matrix is given, the outputs are comupted with it, instead of BPM
+    if np.all(TM) != False:
+        for idx in shift_range:
+            shifted_input = np.roll(input_field, idx).ravel() # shifts the input wavefront with cyclic boudary conditions
+            print(shifted_input.shape)
+            shifted_outputs[idx, :] = np.roll((np.abs(TM @ shifted_input)**2).ravel(), -idx) # saves the intensity of the output. Shifts it back to the center
+    else:
+        for idx in shift_range:
+            shifted_input = np.roll(input_field, idx) # shifts the input wavefront with cyclic boudary conditions
+            shifted_outputs[idx, :] = np.roll((np.abs(propagate(n, k_0, sample_pitch, shifted_input))**2).ravel(), -idx) # saves the intensity of the output. Shifts it back to the center
+    shifted_outputs = shifted_outputs / np.linalg.norm(shifted_outputs, 1) #normalising all outputs
+
+
+    #Comparing the outputs with a standard deviation method
+    subtracted_outputs = np.zeros(shifted_outputs.shape)
+    for idx in shift_range:
+        subtracted_outputs[idx] = shifted_outputs[idx] - shifted_outputs[0] # subtracting the outputs with the reference
+    std_of_outputs = np.std(subtracted_outputs, axis = 1) # Computing the standard deviation of subtracted outputs
+    if plot_std:
+        fig, axs = plt.subplots()
+        axs.plot(shift_range * sample_pitch[1] * 1e6, std_of_outputs)
+        axs.set(xlabel = '$\mu m$')
+        plt.plot(block = False)
+
+
+    return shifted_outputs
+
+
 
 def main():
 # =============================================================================
     
     #Defining grid properties
     
-    data_shape = [256, 256]  # Number of grid points in z and x  [pixels]
+    data_shape = [128, 512]  # Number of grid points in z and x  [pixels]
     
     #wavelength in meters
     wavelength = 500e-9
@@ -203,18 +238,19 @@ def main():
     
         
     #ABSORBTION AT THE EDGES  
-    #Linearly increasing absorbtion
-    max_extinction_coef = 0.1j #1e-10j
-    
-    #Setting up grid
-    d_grid_extinction = np.abs(np.arange(data_shape[1])-data_shape[1]/2)
-    #setting up linearly increasing coefficients
-    d_grid_extinction = d_grid_extinction/(data_shape[1]/2/max_extinction_coef)-max_extinction_coef/x_shape_multiplier
-    d_grid_extinction *= x_shape_multiplier/(x_shape_multiplier-1) #scaling to max_extinction_coef
-    #setting the middle zone coefficients to 0
-    d_grid_extinction[x_bounds[0]:x_bounds[1]] = 0
-    
-    n += d_grid_extinction
+    turn_on_absorbing_walls = True
+    if turn_on_absorbing_walls:
+        #Linearly increasing absorbtion
+        max_extinction_coef = 0.1j #1e-10j
+        #Setting up grid
+        d_grid_extinction = np.abs(np.arange(data_shape[1])-data_shape[1]/2)
+        #setting up linearly increasing coefficients
+        d_grid_extinction = d_grid_extinction/(data_shape[1]/2/max_extinction_coef)-max_extinction_coef/x_shape_multiplier
+        d_grid_extinction *= x_shape_multiplier/(x_shape_multiplier-1) #scaling to max_extinction_coef
+        #setting the middle zone coefficients to 0
+        d_grid_extinction[x_bounds[0]:x_bounds[1]] = 0
+        
+        n += d_grid_extinction
 
     # n[n > n_limits[1]] = n_limits[1] # reducing the refractive index to the designated maximum value, where it is exceeded
     
@@ -237,7 +273,8 @@ def main():
      
     #Setting which determines, whether the beam propagation will be done or not
     do_the_beam_propagation = True
-    do_the_memory_effect_analysis = False
+    do_angular_memory_effect_analysis = False
+    do_shift_memory_effect_analysis = True
     
     if do_the_beam_propagation:
         #Defining source and its position
@@ -247,11 +284,11 @@ def main():
         
         
         #Defining a Gaussian source
-        # sigma = wavelength / 2
-        # target_field = np.exp(-0.5*x_range**2/sigma**2)
-        # target_field = target_field.astype(np.complex)
-        target_field = np.zeros(data_shape[1]).ravel()
-        target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
+        sigma = wavelength / 2
+        target_field = np.exp(-0.5*x_range**2/sigma**2)
+        target_field = target_field.astype(np.complex)
+        # target_field = np.zeros(data_shape[1]).ravel()
+        # target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
 
         phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
 
@@ -268,8 +305,15 @@ def main():
 
 
 
+        if do_shift_memory_effect_analysis:
 
-        if do_the_memory_effect_analysis:
+            print('[Analysing the shift optical memory effect]')
+
+            shift_memory_effect_analysis(n, k_0, sample_pitch, inverted_input_field, TM = Transmission_matrix)
+
+
+
+        if do_angular_memory_effect_analysis:
 
             print('[Analysing the angular optical memory effect]')
 
@@ -360,18 +404,18 @@ def main():
         plt.show(block = False)
 
 
-        planewave = np.ones(data_shape[1]).flatten()
-        planewave_propagation = propagate(n, k_0, sample_pitch, planewave, True)
-        fig, axs = plt.subplots()
-        axs.imshow(disp.complex2rgb(planewave_propagation), extent = extent_full)
-        axs.set(xlabel = '$\mu$m', ylabel = '$\mu$m')
-        plt.show(block = False)
+        # planewave = np.ones(data_shape[1]).flatten()
+        # planewave_propagation = propagate(n, k_0, sample_pitch, planewave, True)
+        # fig, axs = plt.subplots()
+        # axs.imshow(disp.complex2rgb(planewave_propagation), extent = extent_full)
+        # axs.set(xlabel = '$\mu$m', ylabel = '$\mu$m')
+        # plt.show(block = False)
         
     
     
     #Presentation graphs
 # =============================================================================
-    turn_on_presentation_graphs = True
+    turn_on_presentation_graphs = False
     if turn_on_layer and turn_on_presentation_graphs:
         sigma = wavelength / 2
         target_field = np.exp(-0.5*x_range**2/sigma**2)
