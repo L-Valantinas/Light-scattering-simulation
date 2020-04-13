@@ -101,61 +101,6 @@ def Matrix_pseudo_inversion(Matrix: np.ndarray, singular_value_minimum = 0.1, pl
     return V @ np.diag(S_inv) @ U.T.conj()#using an svd property to get the inverse matrix
 
 
-@disk.cache
-def angular_memory_effect_analysis(tilt_step: np.float, max_tilt_coef: np.float, n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray):
-    """
-    """
-    tilt_coef_range = np.arange(-max_tilt_coef, max_tilt_coef, tilt_step).ravel() # The range of Zernike polynomial coefficients
-    all_output_fields = np.zeros([tilt_coef_range.size, n.shape[1]]) # holds the output fields for each tilt value
-    for idx, coefficient in enumerate(tilt_coef_range):
-        phase_shift = np.exp(coefficient * 2j * np.pi * np.linspace(-0.5, 0.5, n.shape[1])) # tilt phaseshift
-        tilted_field = input_field * phase_shift # tilting the input field
-        output_field = propagate(n, k_0, sample_pitch, tilted_field) # propagating the tilted field
-
-        #taking intensity and normalising
-        output_field = np.abs(output_field)**2
-        output_field /= output_field.max()
-
-        all_output_fields[idx, :] = output_field.ravel() # saving the results
-    return all_output_fields
-
-
-@disk.cache
-def shift_memory_effect_analysis(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarray, plot_std = True, TM = False):
-
-    max_shift = 10 # in pixels
-    shift_range = np.arange(max_shift)
-    shifted_outputs = np.zeros([max_shift, n.shape[1]])
-
-    #If the transmission matrix is given, the outputs are comupted with it, instead of BPM
-    if np.all(TM) != False:
-        for idx in shift_range:
-            shifted_input = np.roll(input_field, idx).ravel() # shifts the input wavefront with cyclic boudary conditions
-            print(shifted_input.shape)
-            shifted_outputs[idx, :] = np.roll((np.abs(TM @ shifted_input)**2).ravel(), -idx) # saves the intensity of the output. Shifts it back to the center
-    else:
-        for idx in shift_range:
-            shifted_input = np.roll(input_field, idx) # shifts the input wavefront with cyclic boudary conditions
-            shifted_outputs[idx, :] = np.roll((np.abs(propagate(n, k_0, sample_pitch, shifted_input))**2).ravel(), -idx) # saves the intensity of the output. Shifts it back to the center
-    shifted_outputs = shifted_outputs / np.linalg.norm(shifted_outputs, 1) #normalising all outputs
-
-
-    #Comparing the outputs with a standard deviation method
-    subtracted_outputs = np.zeros(shifted_outputs.shape)
-    for idx in shift_range:
-        subtracted_outputs[idx] = shifted_outputs[idx] - shifted_outputs[0] # subtracting the outputs with the reference
-    std_of_outputs = np.std(subtracted_outputs, axis = 1) # Computing the standard deviation of subtracted outputs
-    if plot_std:
-        fig, axs = plt.subplots()
-        axs.plot(shift_range * sample_pitch[1] * 1e6, std_of_outputs)
-        axs.set(xlabel = '$\mu m$')
-        plt.plot(block = False)
-
-
-    return shifted_outputs
-
-
-
 
 def main():
 # =============================================================================
@@ -193,7 +138,7 @@ def main():
     rng.seed(0)
 
     #refractive index
-    n_limits = np.array((1, 1.5)) # refractive index magnitude limits in the material
+    n_limits = np.array((1, 1.33)) # refractive index magnitude limits in the material
     n=np.ones(data_shape, dtype=np.complex) #The grid of refractive indices in each pixel
     print('[Calculating the scattering properties of the material]')
 
@@ -229,9 +174,9 @@ def main():
     
     
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
-    turn_on_layer = False
+    turn_on_layer = True
     if turn_on_layer:
-        layer_size_z = 10e-6
+        layer_size_z = 5e-6
         refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
         layer = calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
@@ -274,15 +219,10 @@ def main():
      
     #Setting which determines, whether the beam propagation will be done or not
     do_the_beam_propagation = True
-    do_angular_memory_effect_analysis = False
-    do_shift_memory_effect_analysis = False
+    do_angular_memory_effect_analysis = True
+    do_shift_memory_effect_analysis = True
     
     if do_the_beam_propagation:
-        #Defining source and its position
-        # A_z = np.zeros([data_shape[1]], dtype = np.complex)
-        # A_z[int(data_shape[1]/2-5):int(data_shape[1]/2+5)]=1
-        # A_z = A_z.astype(np.complex)
-        
         
         #Defining a Gaussian source
         sigma = wavelength / 2
@@ -291,7 +231,7 @@ def main():
         # target_field = np.zeros(data_shape[1]).ravel()
         # target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
 
-        phase_shift = np.exp(20 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
+        phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
 
         print('[Calculating the corrected input wavefront]')
         #Using the inverse transmission matrix to invert the input wavefront
@@ -301,69 +241,22 @@ def main():
 
         print('[Propagating the corrected wavefront]')
         focused_field = propagate(n, k_0, sample_pitch, inverted_input_field, True)
-        # output_field = focused_field[-1, :]
-        output_field = calc.center_tilted_output(focused_field[-1,:], 20, data_shape, sample_pitch, wavelength)
-
-
-
-
+        output_field = focused_field[-1, :]
+        # output_field = calc.center_tilted_output(focused_field[-1,:], 20, data_shape, sample_pitch, wavelength)
 
         if do_shift_memory_effect_analysis:
 
             print('[Analysing the shift optical memory effect]')
 
-            shift_memory_effect_analysis(n, k_0, sample_pitch, inverted_input_field, TM = Transmission_matrix)
-
-
+            max_shift = 80 # maximum shift in pixels
+            calc.shift_memory_effect_analysis(max_shift, inverted_input_field, Transmission_matrix, sample_pitch)
 
         if do_angular_memory_effect_analysis:
-
             print('[Analysing the angular optical memory effect]')
 
-
-
-            #Comparing outputs
-
-            ### Will need to calculate max range first
-
-
-            memory_effect = angular_memory_effect_analysis(0.4, 80, n, k_0, sample_pitch, inverted_input_field)
-            
-            number_of_outputs = memory_effect[:, 0].size
-            element_range = np.arange(-80, 80, 0.4)
-            x_mean_range = np.zeros(memory_effect[:,0].shape)
-            for idx in range(number_of_outputs):
-                #measuring the I weighted mean of displacement for a specific output
-                tot_I = np.sum(memory_effect[idx])# sum of irradiances
-                x_mean =  np.sum( memory_effect[idx] / tot_I * x_range *1e6)
-                x_mean_range[idx] = x_mean
-
-            popt, pcov = curve_fit(calc.third_order_polynomial, element_range, x_mean_range)
-            displacement_fit = calc.third_order_polynomial(element_range, *popt)
-            
-            #Calculating the critical points
-            displacement_fit_derivative = np.abs(np.gradient(displacement_fit))
-            x_center_idx = int(number_of_outputs / 2 - 1) # the center of x range in index notation
-            critical_point_idxs = list(displacement_fit_derivative[:x_center_idx]).index(displacement_fit_derivative[:x_center_idx].min()), x_center_idx + list(displacement_fit_derivative[x_center_idx:]).index(displacement_fit_derivative[x_center_idx:].min())
-            critical_points = np.array([ [element_range[idx], displacement_fit[idx]] for idx in critical_point_idxs ] )
-
-
-            #Calculating the standard deviation
-            outputs_std = np.std(memory_effect, 1)
-            
-
-            fig, axs_mem = plt.subplots(1, 2)
-            axs_mem[0].plot(element_range, x_mean_range)
-            axs_mem[0].plot(element_range, displacement_fit)
-            axs_mem[0].scatter(critical_points[:, 0], critical_points[:, 1], color = 'black')
-            axs_mem[0].set(xlabel = '$Z_1^{-1}$ coefficient', ylabel = '$ \langle x \\rangle$, $ \mu m $ ')
-            axs_mem[0].set_title('Average displacement')
-
-            axs_mem[1].plot(element_range, outputs_std)
-            axs_mem[1].set_title('Standard deviation of output fields')
-            axs_mem[1].set(xlabel = '$Z_1^{-1}$ coefficient', ylabel = '$ \sigma$, $ \mu m $ ') 
-                      
-            plt.show(block = False)
+            tilt_coef_range = np.linspace(0,40,80)
+            print(tilt_coef_range[0])
+            calc.angular_memory_effect_analysis(tilt_coef_range, inverted_input_field, Transmission_matrix, data_shape, sample_pitch, wavelength)
 
             
     
