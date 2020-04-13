@@ -156,12 +156,13 @@ def shift_memory_effect_analysis(n: np.ndarray, k_0: np.float, sample_pitch, inp
 
 
 
+
 def main():
 # =============================================================================
     
     #Defining grid properties
     
-    data_shape = [128, 512]  # Number of grid points in z and x  [pixels]
+    data_shape = [256, 256]  # Number of grid points in z and x  [pixels]
     
     #wavelength in meters
     wavelength = 500e-9
@@ -228,7 +229,7 @@ def main():
     
     
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
-    turn_on_layer = True
+    turn_on_layer = False
     if turn_on_layer:
         layer_size_z = 10e-6
         refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
@@ -266,7 +267,7 @@ def main():
     
     print('[Calculating the inverse of the transmission matrix]')
     #Pseudo inverse T-matrix
-    Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 1e-3, plot_singular_values = False)
+    Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 2e-1, plot_singular_values = False)
 
 # =============================================================================        
     #Specific wavefront propagation BPM simulation
@@ -274,7 +275,7 @@ def main():
     #Setting which determines, whether the beam propagation will be done or not
     do_the_beam_propagation = True
     do_angular_memory_effect_analysis = False
-    do_shift_memory_effect_analysis = True
+    do_shift_memory_effect_analysis = False
     
     if do_the_beam_propagation:
         #Defining source and its position
@@ -290,7 +291,7 @@ def main():
         # target_field = np.zeros(data_shape[1]).ravel()
         # target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
 
-        phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
+        phase_shift = np.exp(20 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
 
         print('[Calculating the corrected input wavefront]')
         #Using the inverse transmission matrix to invert the input wavefront
@@ -300,7 +301,9 @@ def main():
 
         print('[Propagating the corrected wavefront]')
         focused_field = propagate(n, k_0, sample_pitch, inverted_input_field, True)
-        output_field = focused_field[-1,:]
+        # output_field = focused_field[-1, :]
+        output_field = calc.center_tilted_output(focused_field[-1,:], 20, data_shape, sample_pitch, wavelength)
+
 
 
 
@@ -421,6 +424,48 @@ def main():
         target_field = np.exp(-0.5*x_range**2/sigma**2)
         target_field = target_field.astype(np.complex)
         disp.scattering_presentation(n, k_0, sample_pitch, target_field, Transmission_matrix_inverse)
+
+
+
+    show_the_importance_of_absorbing_walls = False
+    if show_the_importance_of_absorbing_walls:
+        fig, axs = plt.subplots(2, 2)
+
+        center_ps = np.zeros(data_shape[1])
+        center_ps[int(data_shape[1]/2)] = 1
+
+        axs[0,0].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, center_ps, return_internal_fields = True)[:,x_bounds[0]:x_bounds[1]], 5), extent = extent_partial)
+        axs[0,0].set_title('No absorbing walls')
+        axs[0,0].set(xlabel = 'x, $\mu m$', ylabel = 'z, $\mu m$')
+
+
+        img1 = axs[1,0].imshow(np.abs(Transmission_matrix[x_bounds[0]:x_bounds[1],x_bounds[0]:x_bounds[1]] / Transmission_matrix[x_bounds[0]:x_bounds[1],x_bounds[0]:x_bounds[1]].max())**2)
+        disp.colorbar(img1)
+        axs[1,0].set_title('Intensity transmission matrix')
+        axs[1,0].set(xlabel = 'Matrix columns', ylabel = 'Matrix rows')
+
+        max_extinction_coef = 10j #1e-10j
+        #Setting up grid
+        d_grid_extinction = np.abs(np.arange(data_shape[1])-data_shape[1]/2)
+        #setting up linearly increasing coefficients
+        d_grid_extinction = d_grid_extinction/(data_shape[1]/2/max_extinction_coef)-max_extinction_coef/x_shape_multiplier
+        d_grid_extinction *= x_shape_multiplier/(x_shape_multiplier-1) #scaling to max_extinction_coef
+        #setting the middle zone coefficients to 0
+        d_grid_extinction[x_bounds[0]:x_bounds[1]] = 0
+        n += d_grid_extinction
+
+        Transmission_matrix = T_matrix_measurement(n, k_0, sample_pitch)
+
+        axs[0,1].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, center_ps, True)[:,x_bounds[0]:x_bounds[1]],5), extent = extent_partial)
+        axs[0,1].set_title('Strong absorbing walls')
+        axs[0,1].set(xlabel = 'x, $\mu m$', ylabel = 'z, $\mu m$')
+
+        img2 =axs[1,1].imshow(np.abs(Transmission_matrix[x_bounds[0]:x_bounds[1],x_bounds[0]:x_bounds[1]] / Transmission_matrix[x_bounds[0]:x_bounds[1],x_bounds[0]:x_bounds[1]].max())**2)
+        disp.colorbar(img2)
+        axs[1,1].set_title('Intensity transmission matrix')
+        axs[1,1].set(xlabel = 'Matrix columns', ylabel = 'Matrix rows')
+
+        plt.plot(block = False)
 # =============================================================================
     return Transmission_matrix,n
     
