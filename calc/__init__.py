@@ -5,3 +5,4 @@ from .wavefront_tilt_angle import wavefront_tilt_angle
 from .center_tilted_output import center_tilted_output
 from .angular_memory_effect_analysis import angular_memory_effect_analysis
 from .shift_memory_effect_analysis import shift_memory_effect_analysis
+from .random_circles import random_circles

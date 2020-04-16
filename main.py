@@ -31,7 +31,7 @@ def propagate(n: np.ndarray, k_0: np.float, sample_pitch, input_field: np.ndarra
     kx_range = 2*np.pi * utils.array.calc_frequency_ranges(x_range)
     kz_for_every_kx = np.sqrt(np.maximum(0.0, k_0**2 - kx_range**2))
     propagator_ft = (kx_range**2 < k_0**2) * np.exp(1j * kz_for_every_kx * sample_pitch[0])
-
+    
     # Make a copy now, and make sure it has the right number of dimensions
     field = np.array(input_field)
     while field.ndim < n.ndim:
@@ -107,7 +107,7 @@ def main():
     
     #Defining grid properties
     
-    data_shape = [256, 256]  # Number of grid points in z and x  [pixels]
+    data_shape = [128, 256]  # Number of grid points in z and x  [pixels]
     
     #wavelength in meters
     wavelength = 500e-9
@@ -131,7 +131,7 @@ def main():
     z_range = (np.arange(data_shape[0])-np.floor(data_shape[0]/2))*sample_pitch[0]
     x_range = (np.arange(data_shape[1])-np.floor(data_shape[1]/2))*sample_pitch[1]
 
-    
+    k_0 = 2 * np.pi / wavelength
 # =============================================================================
     # Material properties
     rng = np.random.RandomState()
@@ -147,7 +147,7 @@ def main():
     turn_on_center_sphere = False
     if turn_on_center_sphere:
         refractive_index_of_circle = n_limits[1] - 1
-        center_circle_radius = 8e-6
+        center_circle_radius = 4e-6
         center_coordinates = [int(i/2) for i in data_shape]
         n += calc.generate_circle(refractive_index_of_circle, center_circle_radius,
                                center_coordinates, data_shape, data_size)
@@ -156,33 +156,28 @@ def main():
     
     
     #RANDOMLY PLACED CIRCLES OF REFRACTIVE INDEX IN THE GRID
-    turn_on_random_spheres = False
+    turn_on_random_spheres = True
     if turn_on_random_spheres:
-        number_of_circles = 20
-        max_circle_radius = 5e-6
-        refractive_index_of_random_circles= n_limits[1] - 1
-        random_circle_radii = np.ndarray.flatten(max_circle_radius * rng.rand(1, number_of_circles))
-        random_circle_z_coordinates = rng.choice(np.arange(0, data_shape[0]), number_of_circles)
-        random_circle_x_coordinates = rng.choice(np.arange(x_bounds[0], x_bounds[1]), number_of_circles)
-        
-        for Nr, random_circle_radius in enumerate(random_circle_radii):
-            n += calc.generate_circle(refractive_index_of_random_circles, random_circle_radius,
-                                 [random_circle_z_coordinates[Nr], random_circle_x_coordinates[Nr]],
-                                 data_shape, data_size)
+        number_of_circles = 50
+        max_circle_radius = 3e-6 # in meters
+        refractive_index_of_random_circles = n_limits[1]
+
+        n = calc.random_circles(number_of_circles, max_circle_radius,
+                     refractive_index_of_random_circles, n, data_size, x_bounds)
     
     
     
     
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
-    turn_on_layer = True
+    turn_on_layer = False
     if turn_on_layer:
-        layer_size_z = 5e-6
+        layer_size_z = 0.5e-6
         refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
         layer = calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
         
     
-        
+    n[n > n_limits[1]] = n_limits[1] # reducing the refractive index to the designated maximum value, where it is exceeded
     #ABSORBTION AT THE EDGES  
     turn_on_absorbing_walls = True
     if turn_on_absorbing_walls:
@@ -198,12 +193,9 @@ def main():
         
         n += d_grid_extinction
 
-    # n[n > n_limits[1]] = n_limits[1] # reducing the refractive index to the designated maximum value, where it is exceeded
     
 # =============================================================================
     # T_matrix calculation
-
-    k_0 = 2 * np.pi / wavelength
 
     print('[Calculating the transmission matrix]')
     #Calculating the transmission matrix for the whole x range, including the absorbing walls
@@ -214,6 +206,8 @@ def main():
     #Pseudo inverse T-matrix
     Transmission_matrix_inverse = Matrix_pseudo_inversion(Transmission_matrix, 2e-1, plot_singular_values = False)
 
+    wavevector_tm = F.fft2(Transmission_matrix) # k-space transmission matrix
+
 # =============================================================================        
     #Specific wavefront propagation BPM simulation
      
@@ -222,41 +216,40 @@ def main():
     do_angular_memory_effect_analysis = True
     do_shift_memory_effect_analysis = True
     
-    if do_the_beam_propagation:
+    
         
-        #Defining a Gaussian source
-        sigma = wavelength / 2
-        target_field = np.exp(-0.5*x_range**2/sigma**2)
-        target_field = target_field.astype(np.complex)
-        # target_field = np.zeros(data_shape[1]).ravel()
-        # target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
+    #Defining a Gaussian source
+    sigma = wavelength / 2
+    target_field = np.exp(-0.5*x_range**2/sigma**2)
+    target_field = target_field.astype(np.complex)
+    # target_field = np.zeros(data_shape[1]).ravel()
+    # target_field[(int(data_shape[1]/2)-5):(int(data_shape[1]/2)+5)] = 1
 
-        phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
+    phase_shift = np.exp(0 * 2j * np.pi * np.linspace(-0.5, 0.5, data_shape[1])) # phaseshift
 
-        print('[Calculating the corrected input wavefront]')
-        #Using the inverse transmission matrix to invert the input wavefront
-        inverted_input_field = (Transmission_matrix_inverse @ target_field.flatten())[np.newaxis, :] * phase_shift
-        inverted_input_field /= np.linalg.norm(inverted_input_field.ravel())
+    print('[Calculating the corrected input wavefront]')
+    #Using the inverse transmission matrix to invert the input wavefront
+    inverted_input_field = (Transmission_matrix_inverse @ target_field.flatten())[np.newaxis, :] * phase_shift
+    inverted_input_field /= np.linalg.norm(inverted_input_field.ravel())
 
-
+    if do_the_beam_propagation:
         print('[Propagating the corrected wavefront]')
         focused_field = propagate(n, k_0, sample_pitch, inverted_input_field, True)
         output_field = focused_field[-1, :]
         # output_field = calc.center_tilted_output(focused_field[-1,:], 20, data_shape, sample_pitch, wavelength)
 
-        if do_shift_memory_effect_analysis:
+    if do_shift_memory_effect_analysis:
+        print('[Analysing the shift optical memory effect]')
 
-            print('[Analysing the shift optical memory effect]')
+        max_shift = 80 # maximum shift in pixels
+        calc.shift_memory_effect_analysis(max_shift, inverted_input_field, Transmission_matrix, sample_pitch)
 
-            max_shift = 80 # maximum shift in pixels
-            calc.shift_memory_effect_analysis(max_shift, inverted_input_field, Transmission_matrix, sample_pitch)
+    if do_angular_memory_effect_analysis:
+        print('[Analysing the angular optical memory effect]')
 
-        if do_angular_memory_effect_analysis:
-            print('[Analysing the angular optical memory effect]')
-
-            tilt_coef_range = np.linspace(0,40,80)
-            print(tilt_coef_range[0])
-            calc.angular_memory_effect_analysis(tilt_coef_range, inverted_input_field, Transmission_matrix, data_shape, sample_pitch, wavelength)
+        planewave = np.ones(data_shape[1])
+        tilt_coef_range = np.linspace(0,40,40)
+        calc.angular_memory_effect_analysis(tilt_coef_range, planewave, Transmission_matrix, data_shape, sample_pitch, wavelength)
 
             
     
@@ -312,12 +305,36 @@ def main():
     #Presentation graphs
 # =============================================================================
     turn_on_presentation_graphs = False
-    if turn_on_layer and turn_on_presentation_graphs:
+    if turn_on_presentation_graphs:
         sigma = wavelength / 2
         target_field = np.exp(-0.5*x_range**2/sigma**2)
         target_field = target_field.astype(np.complex)
         disp.scattering_presentation(n, k_0, sample_pitch, target_field, Transmission_matrix_inverse)
 
+
+    present_beam_passing_system = False
+    if present_beam_passing_system:
+        fig, axs = plt.subplots(1, 2)
+
+        # sigma = wavelength/2
+        # gaussian_beam = np.exp(-0.5*x_range**2/sigma**2)
+        # gaussian_beam = gaussian_beam.astype(np.complex)
+
+        planewave = np.ones(data_shape[1])
+
+        img1 = axs[0].imshow( np.abs(propagate(n, k_0, sample_pitch, planewave, True)[:,x_bounds[0]:x_bounds[1]])**2 , cmap = 'seismic', extent = extent_partial ) 
+        # axs[0].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, planewave, return_internal_fields = True)[:,x_bounds[0]:x_bounds[1]], 2), extent = extent_partial)
+        axs[0].set(xlabel = 'x, $\mu m$', ylabel = 'z, $\mu m$')
+        axs[0].set_title('Irradiance of plane wave')
+        disp.colorbar(img1)
+
+
+        img2 = axs[1].imshow( np.abs(n[:,x_bounds[0]:x_bounds[1]]), cmap = 'gray', extent = extent_partial)
+        axs[1].set(xlabel = 'x, $\mu m$', ylabel = 'z, $\mu m$')
+        axs[1].set_title('Refractive index')
+        disp.colorbar(img2)
+
+        plt.show()
 
 
     show_the_importance_of_absorbing_walls = False
