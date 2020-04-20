@@ -13,6 +13,7 @@ from scipy.optimize import curve_fit
 import scipy as sci
 
 import calc
+import calc.fitting
 import utils.display as disp
 import utils.array
 from utils.cache import disk
@@ -107,7 +108,7 @@ def main():
     
     #Defining grid properties
     
-    data_shape = [128, 256]  # Number of grid points in z and x  [pixels]
+    data_shape = [256, 256]  # Number of grid points in z and x  [pixels]
     
     #wavelength in meters
     wavelength = 500e-9
@@ -138,7 +139,7 @@ def main():
     rng.seed(0)
 
     #refractive index
-    n_limits = np.array((1, 1.33)) # refractive index magnitude limits in the material
+    n_limits = np.array((1, 1.5)) # refractive index magnitude limits in the material
     n=np.ones(data_shape, dtype=np.complex) #The grid of refractive indices in each pixel
     print('[Calculating the scattering properties of the material]')
 
@@ -158,12 +159,20 @@ def main():
     #RANDOMLY PLACED CIRCLES OF REFRACTIVE INDEX IN THE GRID
     turn_on_random_spheres = True
     if turn_on_random_spheres:
-        number_of_circles = 50
-        max_circle_radius = 3e-6 # in meters
+        number_of_circles = 50 # if the number of spheres is high, it can take long to compute
+        max_circle_radius = 0.5e-6 # in meters
         refractive_index_of_random_circles = n_limits[1]
 
         n = calc.random_circles(number_of_circles, max_circle_radius,
                      refractive_index_of_random_circles, n, data_size, x_bounds)
+
+        #PARAMETERS USED IN DISSERTATION
+        # number_of_circles = 50 # if the number of spheres is high, it can take long to compute
+        # max_circle_radius = 0.5e-6 # in meters
+        # refractive_index_of_random_circles = n_limits[1]
+
+        # n = calc.random_circles(number_of_circles, max_circle_radius,
+        #              refractive_index_of_random_circles, n, data_size, x_bounds)
     
     
     
@@ -212,7 +221,7 @@ def main():
     #Specific wavefront propagation BPM simulation
      
     #Setting which determines, whether the beam propagation will be done or not
-    do_the_beam_propagation = True
+    do_the_beam_propagation = False
     do_angular_memory_effect_analysis = True
     do_shift_memory_effect_analysis = True
     
@@ -241,33 +250,29 @@ def main():
     if do_shift_memory_effect_analysis:
         print('[Analysing the shift optical memory effect]')
 
-        max_shift = 80 # maximum shift in pixels
+        max_shift = 20 # maximum shift in pixels
         calc.shift_memory_effect_analysis(max_shift, inverted_input_field, Transmission_matrix, sample_pitch)
 
     if do_angular_memory_effect_analysis:
         print('[Analysing the angular optical memory effect]')
 
         planewave = np.ones(data_shape[1])
-        tilt_coef_range = np.linspace(0,40,40)
+        tilt_coef_range = np.linspace(0,10,20)
         calc.angular_memory_effect_analysis(tilt_coef_range, planewave, Transmission_matrix, data_shape, sample_pitch, wavelength)
 
             
     
-# =============================================================================        
-    # DISPLAY    
-    
+# =============================================================================       
+    # DISPLAY 
 
-
-
-    
+    ranges_wo_absorbtion = [z_range,x_range/x_shape_multiplier]
+    ranges_w_absorbtion = [z_range,x_range]
+    extent_partial = disp.ranges2extent(*ranges_wo_absorbtion) * 1e6    
+    extent_full = disp.ranges2extent(*ranges_w_absorbtion) * 1e6
     
     if do_the_beam_propagation:
         fig1, axs = plt.subplots(2,2)
-
-        ranges_wo_absorbtion = [z_range,x_range/x_shape_multiplier]
-        ranges_w_absorbtion = [z_range,x_range]
-        extent_partial = disp.ranges2extent(*ranges_wo_absorbtion) * 1e6    
-        extent_full = disp.ranges2extent(*ranges_w_absorbtion) * 1e6
+        
         #Plots the phase map of the wavefront in area outside the absorbing walls
         axs[0,0].imshow(disp.complex2rgb(focused_field[:,x_bounds[0]:x_bounds[1]], 2), extent = extent_partial)
         axs[0,0].set(xlabel = '$\mu$m', ylabel = '$\mu$m')
@@ -344,7 +349,8 @@ def main():
         center_ps = np.zeros(data_shape[1])
         center_ps[int(data_shape[1]/2)] = 1
 
-        axs[0,0].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, center_ps, return_internal_fields = True)[:,x_bounds[0]:x_bounds[1]], 5), extent = extent_partial)
+        # axs[0,0].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, center_ps, return_internal_fields = True)[:,x_bounds[0]:x_bounds[1]], 5), extent = extent_partial)
+        axs[0,0].imshow( np.abs(propagate(n, k_0, sample_pitch, center_ps, return_internal_fields = True)[:,x_bounds[0]:x_bounds[1]])**2 , extent = extent_partial, interpolation = 'sinc', vmin = 0, vmax = 0.02)
         axs[0,0].set_title('No absorbing walls')
         axs[0,0].set(xlabel = 'x, $\mu m$', ylabel = 'z, $\mu m$')
 
@@ -366,7 +372,8 @@ def main():
 
         Transmission_matrix = T_matrix_measurement(n, k_0, sample_pitch)
 
-        axs[0,1].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, center_ps, True)[:,x_bounds[0]:x_bounds[1]],5), extent = extent_partial)
+        # axs[0,1].imshow(disp.complex2rgb(propagate(n, k_0, sample_pitch, center_ps, True)[:,x_bounds[0]:x_bounds[1]],5), extent = extent_partial)
+        axs[0,1].imshow( np.abs(propagate(n, k_0, sample_pitch, center_ps, True)[:,x_bounds[0]:x_bounds[1]])**2, extent = extent_partial, interpolation = 'sinc', vmin = 0, vmax = 0.02)
         axs[0,1].set_title('Strong absorbing walls')
         axs[0,1].set(xlabel = 'x, $\mu m$', ylabel = 'z, $\mu m$')
 

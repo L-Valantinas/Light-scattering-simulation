@@ -1,6 +1,5 @@
 from .generate_circle import generate_circle
 from .scattering_layer import scattering_layer
-from .third_order_polynomial import third_order_polynomial
 from .wavefront_tilt_angle import wavefront_tilt_angle
 from .center_tilted_output import center_tilted_output
 from .angular_memory_effect_analysis import angular_memory_effect_analysis
