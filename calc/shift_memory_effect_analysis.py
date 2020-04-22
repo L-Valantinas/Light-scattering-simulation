@@ -27,7 +27,7 @@ def shift_memory_effect_analysis(max_shift, input_field: np.ndarray, TM: np.ndar
         fig, axs = plt.subplots()
         img_1, = axs.plot(shift_range * sample_pitch[1] * 1e6, std_of_outputs, color = 'black')
         img_2 = axs.scatter(shift_range * sample_pitch[1] * 1e6, std_of_outputs, s = 40, color = 'crimson', edgecolors = 'black')
-        axs.set_title('Shift memory effect decay [focused beam]')
+        axs.set_title('Shift memory effect decay')
         axs.set(xlabel = '$\delta x, \ \mu m$', ylabel = 'Standard deviation, p.d.u.')
 
         #Fitting a logistic curve onto the results

@@ -39,17 +39,19 @@ def angular_memory_effect_analysis(tilt_coef_range, input_field, TM, data_shape,
         fig, axs = plt.subplots()
         img_1, = axs.plot(shift_idxs * sample_pitch[1] * 1e6, std_of_outputs, color = 'black')
         img_2 = axs.scatter(shift_idxs * sample_pitch[1] * 1e6, std_of_outputs, s = 40, color = 'crimson', edgecolors = 'black')
-        axs.set_title('Angular memory effect decay [focused beam]')
+        axs.set_title('Angular memory effect decay')
         axs.set(xlabel = '$\delta x, \ \mu m$', ylabel = 'Standard deviation, p.d.u.')
 
+
         #Fitting a logistic curve onto the results
-        popt, pcov = curve_fit(logistic_curve, shift_idxs * sample_pitch[1] * 1e6, std_of_outputs)
+        popt, pcov = curve_fit(logistic_curve, (shift_idxs * sample_pitch[1] * 1e6), std_of_outputs)
         smooth_range = np.linspace(-0.1, shift_idxs[-1] * sample_pitch[1] * 1e6, 1000)
         fitted_std = logistic_curve(smooth_range, *popt)
         img_fit, = axs.plot(smooth_range, fitted_std, color = 'blue')
 
         axs.text(0.65 * (shift_idxs[-1] * sample_pitch[1] * 1e6), 0.2 * std_of_outputs.max(), 'Fitting parameters: \nL = {:.3g} \nx_0 = {:.3g} \nk = {:.3g}'.format(*popt))
 
+        # img_3 = axs.scatter((shift_idxs * sample_pitch[1] * 1e6)[-8:], std_of_outputs[-8:], s = 70, marker = 'x', color = 'green')#excluded point
         plt.legend([(img_2, img_1), img_fit], ['STD($\delta x $)', '$L / [1 + \exp(-k (\delta x - x_0)) ]$'])
         plt.plot(block = False)
 

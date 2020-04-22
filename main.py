@@ -157,7 +157,7 @@ def main():
     
     
     #RANDOMLY PLACED CIRCLES OF REFRACTIVE INDEX IN THE GRID
-    turn_on_random_spheres = True
+    turn_on_random_spheres = False
     if turn_on_random_spheres:
         number_of_circles = 50 # if the number of spheres is high, it can take long to compute
         max_circle_radius = 0.5e-6 # in meters
@@ -178,9 +178,9 @@ def main():
     
     
     #RANDOM SCATTERING LAYER OF DEFINED LENGTH
-    turn_on_layer = False
+    turn_on_layer = True
     if turn_on_layer:
-        layer_size_z = 0.5e-6
+        layer_size_z = 5e-6
         refractive_index_deviation_range= n_limits - 1#The the refractive index deviation range
         layer = calc.scattering_layer(layer_size_z, data_shape, data_size, refractive_index_deviation_range, offset = 0)
         n += layer[0]
@@ -221,9 +221,9 @@ def main():
     #Specific wavefront propagation BPM simulation
      
     #Setting which determines, whether the beam propagation will be done or not
-    do_the_beam_propagation = False
-    do_angular_memory_effect_analysis = True
-    do_shift_memory_effect_analysis = True
+    do_the_beam_propagation = True
+    do_angular_memory_effect_analysis = False
+    do_shift_memory_effect_analysis = False
     
     
         
@@ -250,14 +250,14 @@ def main():
     if do_shift_memory_effect_analysis:
         print('[Analysing the shift optical memory effect]')
 
-        max_shift = 20 # maximum shift in pixels
+        max_shift = 41 # maximum shift in pixels
         calc.shift_memory_effect_analysis(max_shift, inverted_input_field, Transmission_matrix, sample_pitch)
 
     if do_angular_memory_effect_analysis:
         print('[Analysing the angular optical memory effect]')
 
         planewave = np.ones(data_shape[1])
-        tilt_coef_range = np.linspace(0,10,20)
+        tilt_coef_range = np.linspace(0,20,40) # min step 0.5 for the anligning to work correctly
         calc.angular_memory_effect_analysis(tilt_coef_range, planewave, Transmission_matrix, data_shape, sample_pitch, wavelength)
 
             
